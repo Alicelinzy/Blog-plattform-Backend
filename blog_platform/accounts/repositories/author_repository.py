@@ -1,7 +1,9 @@
 from accounts.models import Author
-from accounts.serializers import AuthorSerializer 
+from accounts.serializers import AuthorSerializer
 from django.db import IntegrityError, transaction
 import re
+from django.contrib.auth import get_user_model
+User = get_user_model() 
 
 
 class RepositoryResponse:
@@ -16,35 +18,27 @@ class RepositoryResponse:
 
 class AuthorRepository:
     @staticmethod
-    def create_author(data):
+    def create_author(user, author_data):
         try:
             with transaction.atomic():
-                required_fields = ["username", "email", "password"]
-                for field in required_fields:
-                    if field not in data or not data[field].strip():
-                        return RepositoryResponse(False, None, f"{field} is required.")
-
-                email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-                if not re.match(email_pattern, data["email"]):
-                    return RepositoryResponse(False, None, "Invalid email format.")
-
-                if Author.objects.filter(username=data["username"]).exists():
-                    return RepositoryResponse(False, None, "Username already exists.")
-                if Author.objects.filter(email=data["email"]).exists():
-                    return RepositoryResponse(False, None, "Email already exists.")
-
-                author = Author.objects.create_user(
-                    username=data["username"],
-                    email=data["email"],
-                    password=data["password"],
+                if isinstance(user, int):
+                 user = User.objects.filter(id=user).first()
+                if not user:
+                    return RepositoryResponse(False, None, "User not found.")
+                if Author.objects.filter(user=user).exists():
+                    return RepositoryResponse(False, None, "Author already exists for this user.")
+                
+                author = Author.objects.create(
+                    user=user,
+                    bio=author_data.get("bio", ""),
+                    profile_picture=author_data.get("profile_picture", None)
                 )
 
-                # We will Use serializer to return structured data
-                serialized_author = AuthorSerializer(author)
-                return RepositoryResponse(True, serialized_author.data, "Author created successfully.")
-
+                serialized_author = AuthorSerializer(instance=author).data
+                return RepositoryResponse(True, serialized_author, "Author created successfully.")
+        
         except IntegrityError as e:
-            return RepositoryResponse(False, None, "Database integrity error: " + str(e))
+            return RepositoryResponse(False, None, "Database Integrity Error: " + str(e))
         except Exception as e:
             return RepositoryResponse(False, None, "Error creating author: " + str(e))
 
@@ -53,9 +47,10 @@ class AuthorRepository:
         try:
             author = Author.objects.filter(id=author_id).first()
             if author:
-                serialized_author = AuthorSerializer(author)
-                return RepositoryResponse(True, serialized_author.data, "Author found.")
+                serialized_author = AuthorSerializer(instance=author).data
+                return RepositoryResponse(True, serialized_author, "Author found.")
             return RepositoryResponse(False, None, "Author not found.")
+        
         except Exception as e:
             return RepositoryResponse(False, None, "Error retrieving author: " + str(e))
 
@@ -63,8 +58,9 @@ class AuthorRepository:
     def get_all_authors():
         try:
             authors = Author.objects.all()
-            serialized_authors = AuthorSerializer(authors, many=True)
-            return RepositoryResponse(True, serialized_authors.data, "Authors retrieved successfully.")
+            serialized_authors = AuthorSerializer(instance=authors, many=True).data
+            return RepositoryResponse(True, serialized_authors, "Authors retrieved successfully.")
+        
         except Exception as e:
             print(f"Error retrieving authors: {e}")
             return RepositoryResponse(False, None, "Error retrieving authors.")
@@ -82,18 +78,23 @@ class AuthorRepository:
                     if not re.match(email_pattern, data["email"]):
                         return RepositoryResponse(False, None, "Invalid email format.")
 
-                    if Author.objects.exclude(id=author_id).filter(email=data["email"]).exists():
+                    if Author.objects.exclude(id=author_id).filter(user__email=data["email"]).exists():
                         return RepositoryResponse(False, None, "Email already exists.")
 
-                if "username" in data and Author.objects.exclude(id=author_id).filter(username=data["username"]).exists():
+                if "username" in data and Author.objects.exclude(id=author_id).filter(user__username=data["username"]).exists():
                     return RepositoryResponse(False, None, "Username already exists.")
 
                 for key, value in data.items():
-                    setattr(author, key, value)
+                    if hasattr(author.user, key):
+                        setattr(author.user, key, value)
+                    else:
+                        setattr(author, key, value)
+
+                author.user.save()
                 author.save()
 
-                serialized_author = AuthorSerializer(author)
-                return RepositoryResponse(True, serialized_author.data, "Author updated successfully.")
+                serialized_author = AuthorSerializer(instance=author).data
+                return RepositoryResponse(True, serialized_author, "Author updated successfully.")
 
         except Exception as e:
             return RepositoryResponse(False, None, "Error updating author: " + str(e))
@@ -108,5 +109,6 @@ class AuthorRepository:
 
                 author.delete()
             return RepositoryResponse(True, None, "Author deleted successfully.")
+        
         except Exception as e:
             return RepositoryResponse(False, None, "Error deleting author: " + str(e))

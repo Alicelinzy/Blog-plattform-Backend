@@ -1,21 +1,12 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import User
+from base.models import BaseModel
 
 
-class Author(AbstractUser):
-    bio = models.TextField(blank=True, null=True)  # Short biography
+class Author(BaseModel):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name="author")
+    bio = models.TextField(blank=True, null=True)
     profile_picture = models.ImageField(upload_to="profile_pics/", blank=True, null=True)
-
-    groups = models.ManyToManyField(
-        "auth.Group",
-        related_name="author_groups",
-        blank=True
-    )
-    user_permissions = models.ManyToManyField(
-        "auth.Permission",
-        related_name="author_permissions",
-        blank=True
-    )
 
     class Meta:
         verbose_name = "Author"
@@ -25,19 +16,9 @@ class Author(AbstractUser):
         return f"{self.username} (Author)"
 
 
-class Reader(AbstractUser):
-    favorite_categories = models.ManyToManyField("blog.Category", blank=True)  
-
-    groups = models.ManyToManyField(
-        "auth.Group",
-        related_name="reader_groups",
-        blank=True
-    )
-    user_permissions = models.ManyToManyField(
-        "auth.Permission",
-        related_name="reader_permissions",
-        blank=True
-    )
+class Reader(BaseModel):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name="reader")
+    favorite_categories = models.ManyToManyField("blog.Category", blank=True) 
 
     class Meta:
         verbose_name = "Reader"

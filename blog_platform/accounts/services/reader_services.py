@@ -3,6 +3,7 @@ from django.db import transaction
 from rest_framework import status
 from accounts.repositories.reader_repository import ReaderRepository
 from accounts.serializers import ReaderSerializer
+from accounts.services.user_serivces import UserService, ServiceResponse
 
 
 class APIResponse:
@@ -18,36 +19,45 @@ class APIResponse:
 
 class ReaderService:
     @staticmethod
-    def validate_email(email):
-        return bool(re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email))
+    def create_reader(data):
+        try:
+            with transaction.atomic():
+                user_fields = ["username", "password", "email", "first_name", "last_name"]
+                user_data = {field: data.get(field, "").strip() for field in user_fields}
+                favorite_categories = data.get("favorite_categories", [])
 
-    @staticmethod
-    def create_reader(username: str, password: str, email: str):
-        if not all([username, password, email]):
-            return APIResponse(False, None, "All fields are required", status.HTTP_400_BAD_REQUEST)
+                user_response = UserService.create_user(user_data)
+                if not user_response.success:
+                    return ServiceResponse(False, None, user_response.message, user_response.status)
 
-        if not ReaderService.validate_email(email):
-            return APIResponse(False, None, "Invalid email format", status.HTTP_400_BAD_REQUEST)
+                user = user_response.data  
+                reader_response = ReaderRepository.create_reader(user, favorite_categories)
+                
+                if not reader_response.success:
+                    return ServiceResponse(False, None, reader_response.message, status.HTTP_400_BAD_REQUEST)
 
-        if len(password) < 8:
-            return APIResponse(False, None, "Password must be at least 8 characters", status.HTTP_400_BAD_REQUEST)
-
-        response = ReaderRepository.create_reader({"username": username, "password": password, "email": email})
-
-        if response.success:
-            serialized_reader = ReaderSerializer(response.data).data
-        else:
-            serialized_reader = None
-
-        return APIResponse(response.success, serialized_reader, response.message,status.HTTP_201_CREATED if response.success else status.HTTP_400_BAD_REQUEST)
+                serialized_reader = ReaderSerializer(reader_response.data).data
+                return ServiceResponse(True, serialized_reader, "Reader created successfully", status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return ServiceResponse(False, None, f"Error creating reader: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @staticmethod
     def get_reader_by_id(reader_id: int):
         response = ReaderRepository.get_reader_by_id(reader_id)
-
         if response.success:
-            serialized_reader = ReaderSerializer(response.data).data 
-            return APIResponse(True, serialized_reader, response.message, status.HTTP_200_OK)
+            reader = response.data
+            user = reader.user
+            reader_data = {
+                "id": reader.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "favorite_categories": list(reader.favorite_categories.values_list("name", flat=True)),  
+                "created_at": reader.created_at,
+            }
+            return APIResponse(True, reader_data, response.message, status.HTTP_200_OK)
 
         return APIResponse(False, None, response.message, status.HTTP_404_NOT_FOUND)
 
@@ -62,25 +72,34 @@ class ReaderService:
         return APIResponse(False, None, response.message, status.HTTP_400_BAD_REQUEST)
 
     @staticmethod
-    def update_reader(reader_id: int, **kwargs):
-        if not kwargs:
+    def update_reader(reader_id: int, data):
+        if not data:
             return APIResponse(False, None, "No fields provided to update", status.HTTP_400_BAD_REQUEST)
 
         response = ReaderRepository.get_reader_by_id(reader_id)
         if not response.success:
             return APIResponse(False, None, "Reader not found", status.HTTP_404_NOT_FOUND)
 
-        if "email" in kwargs and not ReaderService.validate_email(kwargs["email"]):
-            return APIResponse(False, None, "Invalid email format", status.HTTP_400_BAD_REQUEST)
+        reader = response.data
+        user = reader.user
+
+        user_fields = ["username", "email", "first_name", "last_name"]
+        user_data = {key: data[key] for key in user_fields if key in data}
+        reader_data = {"favorite_categories": data.get("favorite_categories")} if "favorite_categories" in data else {}
 
         with transaction.atomic():
-            response = ReaderRepository.update_reader(reader_id, kwargs)
+            if user_data:
+                user_response = UserService.update_user(user.id, user_data)
+                if not user_response.success:
+                    return APIResponse(False, None, user_response.message, user_response.status)
 
-        if response.success:
-            serialized_reader = ReaderSerializer(response.data).data 
-            return APIResponse(True, serialized_reader, response.message, status.HTTP_200_OK)
+            if reader_data:
+                reader_response = ReaderRepository.update_reader(reader_id, reader_data)
+                if not reader_response.success:
+                    return APIResponse(False, None, reader_response.message, status.HTTP_400_BAD_REQUEST)
 
-        return APIResponse(False, None, response.message, status.HTTP_400_BAD_REQUEST)
+        updated_reader = ReaderRepository.get_reader_by_id(reader_id).data
+        return APIResponse(True, ReaderSerializer(updated_reader).data, "Reader updated successfully", status.HTTP_200_OK)
 
     @staticmethod
     def delete_reader(reader_id: int):
@@ -88,7 +107,15 @@ class ReaderService:
         if not response.success:
             return APIResponse(False, None, "Reader not found", status.HTTP_404_NOT_FOUND)
 
+        reader = response.data
+        user_id = reader.user.id  
         with transaction.atomic():
-            response = ReaderRepository.delete_reader(reader_id)
+            reader_response = ReaderRepository.delete_reader(reader_id)
+            if not reader_response.success:
+                return APIResponse(False, None, reader_response.message, status.HTTP_400_BAD_REQUEST)
 
-        return APIResponse(response.success, None, response.message, status.HTTP_200_OK if response.success else status.HTTP_400_BAD_REQUEST)
+            user_response = UserService.delete_user(user_id)
+            if not user_response.success:
+                return APIResponse(False, None, user_response.message, user_response.status)
+
+        return APIResponse(True, None, "Reader deleted successfully", status.HTTP_200_OK)

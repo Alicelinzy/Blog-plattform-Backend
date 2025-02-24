@@ -19,50 +19,55 @@ def create_author(request):
     password = request.data.get("password")
     email = request.data.get("email")
 
-    response = AuthorService.create_author(username, password, email)
+    response = AuthorService.create_author(request.data)
     
     return Response({"success": response.success, "message": response.message, "data": response.data}, status=response.status)
 
 
 @api_view(["POST"])
 def create_reader(request):
-    print("create_reader function was called!") 
     username = request.data.get("username")
     password = request.data.get("password")
     email = request.data.get("email")
+    favorite_categories = request.data.get("favorite_categories", [])
 
-    response = ReaderService.create_reader(username, password, email)
+    response = ReaderService.create_reader({
+        "username": username,
+        "password": password,
+        "email": email,
+        "favorite_categories": favorite_categories,
+    })
 
     return Response({"success": response.success, "message": response.message, "data": response.data}, status=response.status)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])  # 🔒 Requires authentication
+@permission_classes([IsAuthenticated])  
 def get_all_authors(request):
     response = AuthorService.get_all_authors()
     return Response({"success": response.success, "message": response.message, "data": response.data}, status=response.status)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])  # 🔒 Requires authentication
+@permission_classes([IsAuthenticated]) 
 def get_all_readers(request):
     response = ReaderService.get_all_readers()
     return Response({"success": response.success, "message": response.message, "data": response.data}, status=response.status)
 
 
 @api_view(["PUT", "PATCH"])
-@permission_classes([IsAuthenticated])  # 🔒 Requires authentication
+@permission_classes([IsAuthenticated]) 
 def update_user(request, user_id):
     response = AuthorService.update_author(user_id, **request.data)
 
     if not response.success:  
-        response = ReaderService.update_reader(user_id, **request.data)
+        response = ReaderService.update_reader(user_id, **request.data)  
 
     return Response({"success": response.success, "message": response.message, "data": response.data}, status=response.status)
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])  # 🔒 Requires authentication
+@permission_classes([IsAuthenticated])  
 def delete_user(request, user_id):
     author_response = AuthorService.delete_author(user_id)
 
@@ -87,7 +92,7 @@ def login_view(request):
         user = Reader.objects.filter(username=username).first()
         user_type = "reader"
 
-    if not user or not check_password(password, user.password):  # Check password manually
+    if not user or not check_password(password, user.password):  
         return Response({"success": False, "message": "Invalid credentials. Please try again."},
                         status=status.HTTP_401_UNAUTHORIZED)
 
@@ -95,13 +100,13 @@ def login_view(request):
     access_token_payload = {
         "user_id": user.id,
         "username": user.username,
-        "exp": datetime.utcnow() + timedelta(hours=1),  # Token expires in 1 hour
+        "exp": datetime.utcnow() + timedelta(hours=4), 
         "user_type": user_type
     }
     
     refresh_token_payload = {
         "user_id": user.id,
-        "exp": datetime.utcnow() + timedelta(days=7),  # Refresh token expires in 7 days
+        "exp": datetime.utcnow() + timedelta(days=14),  
     }
 
     access_token = jwt.encode(access_token_payload, settings.SECRET_KEY, algorithm="HS256")
@@ -118,4 +123,4 @@ def login_view(request):
             "email": user.email,
             "user_type": user_type
         }
-    }, status=status.HTTP_200_OK)
+    }, status=status.HTTP_200_OK) 
