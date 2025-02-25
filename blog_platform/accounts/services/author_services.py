@@ -3,7 +3,10 @@ from django.db import transaction
 from rest_framework import status
 from accounts.repositories.author_repository import AuthorRepository
 from accounts.serializers import AuthorSerializer
-from accounts.services.user_serivces import UserService 
+from accounts.services.user_serivces import UserService
+from django.contrib.auth.models import User
+from accounts.repositories.author_repository import RepositoryResponse
+from accounts.models import Author
  
 
 class APIResponse:
@@ -28,29 +31,37 @@ class AuthorService:
     def create_author(data):
         try:
             with transaction.atomic():
-                user_fields = ["username", "password", "email", "first_name", "last_name"]
-                user_data = {field: data.get(field, "").strip() for field in user_fields}
-
-                author_fields = ["bio", "profile_picture"]
-                author_data = {
-                    "bio": data.get("bio", "").strip(),
-                    "profile_picture": data.get("profile_picture", None) 
+                required_fields = ["username", "password", "email", "first_name", "last_name"]
+                for field in required_fields:
+                    if field not in data:
+                        return APIResponse(False, None, f"{field} is required", status.HTTP_400_BAD_REQUEST)
+                existing_user = User.objects.filter(email=data.get('email')).first()
+                if existing_user:
+                    return APIResponse(False, None, f"User with email {data.get('email')} already exists", status.HTTP_400_BAD_REQUEST)
+                user_data = {
+                    "username": data.get("username"),
+                    "password": data.get("password"),
+                    "email": data.get("email"),
+                    "first_name": data.get("first_name"),
+                    "last_name": data.get("last_name")
                 }
-
                 """"validates email"""""
                 
                 if not AuthorService.validate_email(user_data["email"]):
                     return APIResponse(False, None, "Invalid email format", status.HTTP_400_BAD_REQUEST)
+                
+                new_user = User.objects.create_user(**user_data)
+                if not new_user:
+                    return APIResponse(False, None, "Failed to create user", status.HTTP_400_BAD_REQUEST)
 
-                """"Create our user first"""""
-                user_response = UserService.create_user(user_data)
-                if not user_response.success:
-                    return APIResponse(False, None, user_response.message, user_response.status)
-
-                user = user_response.data 
+                author_data = {
+                    "user": new_user,
+                    "bio": data.get("bio", ""),
+                    "profile_picture": data.get("profile_picture", "") 
+                }
 
                 """"Create author"""""
-                author_response = AuthorRepository.create_author(user, author_data)
+                author_response = AuthorRepository.create_author(new_user, author_data)
                 if not author_response.success:
                     return APIResponse(False, None, author_response.message, status.HTTP_400_BAD_REQUEST)
 
@@ -58,42 +69,64 @@ class AuthorService:
                 return APIResponse(True, serialized_author, "Author created successfully", status.HTTP_201_CREATED)
 
         except Exception as e:
-            return APIResponse(False, None, f"Error creating author: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return APIResponse(False, None, f"Error creating author in service: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @staticmethod
-    def get_author_by_id(author_id: int):
-        response = AuthorRepository.get_author_by_id(author_id)
-        if response.success:
-            return APIResponse(True, response.data, response.message, status.HTTP_200_OK)
-        return APIResponse(False, None, response.message, status.HTTP_404_NOT_FOUND)
+    def get_author_by_id(author_id):
+        try:
+            author = Author.objects.filter(user__id=author_id).first()
+            if author:
+                serialized_author = AuthorSerializer(instance=author).data
+                return RepositoryResponse(True, serialized_author, "Author found.")
+            return RepositoryResponse(False, None, "Author not found.")
+        except Exception as e:
+            return RepositoryResponse(False, None, "Error retrieving author: " + str(e))
 
     @staticmethod
     def get_all_authors():
-        response = AuthorRepository.get_all_authors()
-        if response.success:
-            return APIResponse(True, response.data, response.message, status.HTTP_200_OK)
-        return APIResponse(False, None, response.message, status.HTTP_400_BAD_REQUEST)
+        try:
+            authors = Author.objects.all()
+            serialized_authors = AuthorSerializer(instance=authors, many=True).data
+            return RepositoryResponse(True, serialized_authors, "Authors retrieved successfully.")
+        except Exception as e:
+            print(f"Error retrieving authors: {e}")
+            return RepositoryResponse(False, None, "Error retrieving authors.")
 
     @staticmethod
-    def update_author(author_id: int, **kwargs):
-        if not kwargs:
-            return APIResponse(False, None, "No fields provided to update", status.HTTP_400_BAD_REQUEST)
+    def update_author(author_id, data):
+        try:
+            with transaction.atomic():
+                author = Author.objects.filter(user__id=author_id).first()
+                if not author:
+                    return RepositoryResponse(False, None, "Author not found.")
 
-        response = AuthorRepository.get_author_by_id(author_id)
-        if not response.success:
-            return APIResponse(False, None, "Author not found", status.HTTP_404_NOT_FOUND)
+                if "email" in data:
+                    email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+                    if not re.match(email_pattern, data["email"]):
+                        return RepositoryResponse(False, None, "Invalid email format.")
 
-        if "email" in kwargs:
-            if not AuthorService.validate_email(kwargs["email"]):
-                return APIResponse(False, None, "Invalid email format", status.HTTP_400_BAD_REQUEST)
+                    if Author.objects.exclude(user__id=author_id).filter(user__email=data["email"]).exists():
+                        return RepositoryResponse(False, None, "Email already exists.")
 
-        with transaction.atomic():
-            response = AuthorRepository.update_author(author_id, kwargs)
+                if "username" in data and Author.objects.exclude(user__id=author_id).filter(user__username=data["username"]).exists():
+                    return RepositoryResponse(False, None, "Username already exists.")
 
-        if response.success:
-            return APIResponse(True, response.data, response.message, status.HTTP_200_OK)
+                for key, value in data.items():
+                    if hasattr(author.user, key):
+                        setattr(author.user, key, value)
+                    else:
+                        setattr(author, key, value)
 
-        return APIResponse(False, None, response.message, status.HTTP_400_BAD_REQUEST)
+                author.user.save()
+                author.save()
+
+                serialized_author = AuthorSerializer(instance=author).data
+                return RepositoryResponse(True, serialized_author, "Author updated successfully.")
+
+        except Exception as e:
+            return RepositoryResponse(False, None, "Error updating author: " + str(e))
+
+    
 
     @staticmethod
     def delete_author(author_id: int):

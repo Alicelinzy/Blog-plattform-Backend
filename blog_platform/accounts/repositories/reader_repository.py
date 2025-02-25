@@ -1,6 +1,7 @@
 from accounts.models import Reader
 from blog.models import Category  
 from django.db import transaction
+from django.db import transaction, IntegrityError
 
 class RepositoryResponse:
     def __init__(self, success: bool, data=None, message=""):
@@ -16,16 +17,25 @@ class ReaderRepository:
     def create_reader(user, favorite_categories=None):
         try:
             with transaction.atomic():
+                """Check if reader already exists"""
+                if Reader.objects.filter(user=user).exists():
+                    return RepositoryResponse(False, None, "Reader already exists for this user.")
+
+                """Create Reader"""
                 reader = Reader.objects.create(user=user)
-                # Assign favorite categories if provided
+
+                """Assign favorite categories if provided"""
                 if favorite_categories:
-                    categories = Category.objects.filter(id__in=favorite_categories)
+                    categories = Category.objects.filter(id__in=favorite_categories) 
                     reader.favorite_categories.set(categories)
 
                 return RepositoryResponse(True, reader, "Reader created successfully")
 
+        except IntegrityError as e:
+            return RepositoryResponse(False, None, "Database Integrity Error: " + str(e))
+
         except Exception as e:
-            return RepositoryResponse(False, None, f"Error creating reader: {str(e)}")
+            return RepositoryResponse(False, None, "Error creating reader: " + str(e))
 
     @staticmethod
     def get_reader_by_id(reader_id):

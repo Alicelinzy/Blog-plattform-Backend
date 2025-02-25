@@ -2,7 +2,6 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from rest_framework import status  
 import re
-
 class ServiceResponse:
     def __init__(self, success: bool, data=None, message="", status=status.HTTP_200_OK):
         self.success = success
@@ -51,3 +50,18 @@ class UserService:
             return ServiceResponse(False, None, f"Database error: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             return ServiceResponse(False, None, f"Error creating user: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+    @staticmethod
+    def delete_user(user_id):
+        """Deletes a user by ID"""
+        try:
+            user = User.objects.filter(id=user_id).first()
+            if not user:
+                return ServiceResponse(False, None, "User not found", status.HTTP_404_NOT_FOUND)
+
+            user.delete()
+            return ServiceResponse(True, None, "User deleted successfully", status.HTTP_200_OK)
+
+        except Exception as e:
+            return ServiceResponse(False, None, f"Error deleting user: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)

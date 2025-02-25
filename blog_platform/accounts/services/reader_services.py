@@ -4,6 +4,8 @@ from rest_framework import status
 from accounts.repositories.reader_repository import ReaderRepository
 from accounts.serializers import ReaderSerializer
 from accounts.services.user_serivces import UserService, ServiceResponse
+from django.contrib.auth.models import User
+from accounts.models import Reader
 
 
 class APIResponse:
@@ -19,29 +21,60 @@ class APIResponse:
 
 class ReaderService:
     @staticmethod
+    def validate_email(email: str):
+        """"validate email format"""
+        email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+        return re.match(email_pattern, email) is not None
+    
+
+    @staticmethod
     def create_reader(data):
         try:
             with transaction.atomic():
-                user_fields = ["username", "password", "email", "first_name", "last_name"]
-                user_data = {field: data.get(field, "").strip() for field in user_fields}
+                """Check required fields"""
+                required_fields = ["username", "password", "email", "first_name", "last_name"]
+                for field in required_fields:
+                    if field not in data:
+                        return APIResponse(False, None, f"{field} is required", status.HTTP_400_BAD_REQUEST)
+
+                """Check if email already exists"""
+                existing_user = User.objects.filter(email=data.get("email")).first()
+                if existing_user:
+                    return APIResponse(False, None, f"User with email {data.get('email')} already exists", status.HTTP_400_BAD_REQUEST)
+
+                """Create User"""
+                user_data = {
+                    "username": data["username"],
+                    "password": data["password"],
+                    "email": data["email"],
+                    "first_name": data["first_name"],
+                    "last_name": data["last_name"]
+                }
+                new_user = User.objects.create_user(**user_data)
+
+                if not new_user:
+                    return APIResponse(False, None, "Failed to create user", status.HTTP_400_BAD_REQUEST)
+
+                """Validate email format"""
+                if not ReaderService.validate_email(user_data["email"]):
+                    return APIResponse(False, None, "Invalid email format", status.HTTP_400_BAD_REQUEST)
+
+                """Extract favorite categories"""
                 favorite_categories = data.get("favorite_categories", [])
 
-                user_response = UserService.create_user(user_data)
-                if not user_response.success:
-                    return ServiceResponse(False, None, user_response.message, user_response.status)
+                """Call Repository to create Reader"""
+                reader_response = ReaderRepository.create_reader(new_user, favorite_categories)
 
-                user = user_response.data  
-                reader_response = ReaderRepository.create_reader(user, favorite_categories)
-                
                 if not reader_response.success:
-                    return ServiceResponse(False, None, reader_response.message, status.HTTP_400_BAD_REQUEST)
+                    return APIResponse(False, None, reader_response.message, status.HTTP_400_BAD_REQUEST)
 
+                """Return serialized reader"""
                 serialized_reader = ReaderSerializer(reader_response.data).data
-                return ServiceResponse(True, serialized_reader, "Reader created successfully", status.HTTP_201_CREATED)
-        
-        except Exception as e:
-            return ServiceResponse(False, None, f"Error creating reader: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return APIResponse(True, serialized_reader, "Reader created successfully", status.HTTP_201_CREATED)
 
+        except Exception as e:
+            return APIResponse(False, None, f"Error creating reader in service: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
     @staticmethod
     def get_reader_by_id(reader_id: int):
         response = ReaderRepository.get_reader_by_id(reader_id)
@@ -102,20 +135,19 @@ class ReaderService:
         return APIResponse(True, ReaderSerializer(updated_reader).data, "Reader updated successfully", status.HTTP_200_OK)
 
     @staticmethod
-    def delete_reader(reader_id: int):
-        response = ReaderRepository.get_reader_by_id(reader_id)
-        if not response.success:
-            return APIResponse(False, None, "Reader not found", status.HTTP_404_NOT_FOUND)
+    def delete_reader(reader_id):
+        """Deletes a reader and their user account"""
+        try:
+            reader = Reader.objects.filter(user__id=reader_id).first()
+            if not reader:
+                return APIResponse(False, None, "Reader not found", status.HTTP_404_NOT_FOUND)
 
-        reader = response.data
-        user_id = reader.user.id  
-        with transaction.atomic():
-            reader_response = ReaderRepository.delete_reader(reader_id)
-            if not reader_response.success:
-                return APIResponse(False, None, reader_response.message, status.HTTP_400_BAD_REQUEST)
-
-            user_response = UserService.delete_user(user_id)
+            
+            user_response = UserService.delete_user(reader.user.id)
             if not user_response.success:
-                return APIResponse(False, None, user_response.message, user_response.status)
+                return user_response  
 
-        return APIResponse(True, None, "Reader deleted successfully", status.HTTP_200_OK)
+            return APIResponse(True, None, "Reader deleted successfully", status.HTTP_200_OK)
+
+        except Exception as e:
+            return APIResponse(False, None, f"Error deleting reader: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)

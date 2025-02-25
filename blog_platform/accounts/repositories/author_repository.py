@@ -21,20 +21,18 @@ class AuthorRepository:
     def create_author(user, author_data):
         try:
             with transaction.atomic():
-                if isinstance(user, int):
-                 user = User.objects.filter(id=user).first()
-                if not user:
-                    return RepositoryResponse(False, None, "User not found.")
                 if Author.objects.filter(user=user).exists():
                     return RepositoryResponse(False, None, "Author already exists for this user.")
                 
                 author = Author.objects.create(
                     user=user,
                     bio=author_data.get("bio", ""),
-                    profile_picture=author_data.get("profile_picture", None)
+                    profile_picture=author_data.get("profile_picture", "")
                 )
+                if not author:
+                    return RepositoryResponse(False, None, "Error creating author.")
 
-                serialized_author = AuthorSerializer(instance=author).data
+                serialized_author = AuthorSerializer(author).data
                 return RepositoryResponse(True, serialized_author, "Author created successfully.")
         
         except IntegrityError as e:
