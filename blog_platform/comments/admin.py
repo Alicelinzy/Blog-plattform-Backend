@@ -6,7 +6,7 @@ from .models import Comment
 
 class CommentAdmin(admin.ModelAdmin):
     list_display = ("id", "blog", "user", "content", "is_approved", "created_at")
-    search_fields = ("user__username", "blog__title", "content")
+    search_fields = ("user__user__username", "blog__title", "content")
     list_filter = ("is_approved", "created_at")
     ordering = ("-created_at",)
     actions = ["approve_comments"]

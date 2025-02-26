@@ -1,6 +1,6 @@
 from comments.models import Comment
+from accounts.models import Author, Reader
 from blog.models import Blog
-from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError
 from base.utils.responses import APIResponse
 from rest_framework import status
@@ -11,18 +11,27 @@ class CommentRepository:
     def create_comment(data):
         try:
             blog = Blog.objects.filter(id=data.get("blog_id")).first()
-            content_type = ContentType.objects.filter(model=data.get("user_type")).first()
             parent = Comment.objects.filter(id=data.get("parent_id")).first() if data.get("parent_id") else None
+            
+            author = Author.objects.filter(id=data.get("author_id")).first() if data.get("author_id") else None
+            reader = Reader.objects.filter(id=data.get("reader_id")).first() if data.get("reader_id") else None
 
-            if not (blog and content_type and data.get("user_id") and data.get("content")):
+            if not blog or not data.get("content") or (not author and not reader):
                 return APIResponse(False, None, "Invalid input data.", status.HTTP_400_BAD_REQUEST)
 
+            
             comment = Comment.objects.create(
-                blog=blog, user_type=content_type, user_id=data["user_id"], parent=parent, content=data["content"]
+                blog=blog, 
+                author=author, 
+                reader=reader, 
+                parent=parent, 
+                content=data["content"]
             )
             return APIResponse(True, comment, "Comment created successfully.", status.HTTP_201_CREATED)
+        
         except IntegrityError as e:
             return APIResponse(False, None, f"Database error: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         except Exception as e:
             return APIResponse(False, None, f"Error creating comment: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
 

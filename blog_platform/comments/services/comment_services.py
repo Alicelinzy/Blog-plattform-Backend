@@ -7,7 +7,7 @@ from rest_framework import status
 class CommentService:
     @staticmethod
     def create_comment(data):
-        if not all([data.get("blog_id"), data.get("user_type"), data.get("user_id"), data.get("content")]):
+        if not all([data.get("blog_id"), data.get("content")]) or not (data.get("author_id") or data.get("reader_id")):
             return APIResponse(False, None, "Missing required fields.", status.HTTP_400_BAD_REQUEST)
 
         response = CommentRepository.create_comment(data)

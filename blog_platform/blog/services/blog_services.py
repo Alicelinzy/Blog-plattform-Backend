@@ -18,7 +18,7 @@ class APIResponse:
 
 class BlogService:
     @staticmethod
-    def create_blog(title: str, content: str, author_id: int, category_id: int = None):
+    def create_blog(user, title: str, content: str, author_id: int, category_id: int = None):
         if not title or not content:
             return APIResponse(False, None, "Title and content are required.", status.HTTP_400_BAD_REQUEST)
 
@@ -30,7 +30,7 @@ class BlogService:
         if category and not category.success:
             return APIResponse(False, None, "Category not found.", status.HTTP_404_NOT_FOUND)
 
-        response = BlogRepository.create_blog(title, content, author_id, category_id if category else None)
+        response = BlogRepository.create_blog(user, title, content, author_id, category_id if category else None)
         return APIResponse(response.success, response.data, response.message, status.HTTP_201_CREATED if response.success else status.HTTP_400_BAD_REQUEST)
 
     @staticmethod

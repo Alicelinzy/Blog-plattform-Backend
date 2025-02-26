@@ -17,7 +17,7 @@ class RepositoryResponse:
 
 class BlogRepository:
     @staticmethod
-    def create_blog(title: str, content: str, author_id: int, category_id: int = None, status: str = "draft"):
+    def create_blog(user, title: str, content: str, author_id: int, category_id: int = None, status: str = "draft"):
         try:
             author = Author.objects.filter(id=author_id).first()
             if not author:
@@ -31,6 +31,7 @@ class BlogRepository:
                 return RepositoryResponse(False, None, "A blog with this title already exists.")
 
             blog = Blog.objects.create(
+                created_by= user,
                 title=title, content=content, author=author,
                 category=category, status=status,
                 published_at=now() if status == "published" else None
