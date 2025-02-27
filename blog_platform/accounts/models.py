@@ -13,7 +13,7 @@ class Author(BaseModel):
         verbose_name_plural = "Authors"
 
     def __str__(self):
-        return f"{self.username} (Author)"
+     return f"{self.user.username} (Author)"
 
 
 class Reader(BaseModel):
@@ -25,5 +25,5 @@ class Reader(BaseModel):
         verbose_name_plural = "Readers"
 
     def __str__(self):
-        return f"{self.username} (Reader)"
+         return f"{self.user.username} (Reader)"
 

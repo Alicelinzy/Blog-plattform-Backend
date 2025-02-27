@@ -17,11 +17,12 @@ class RepositoryResponse:
 
 class BlogRepository:
     @staticmethod
-    def create_blog(user, title: str, content: str, author_id: int, category_id: int = None, status: str = "draft"):
+    def create_blog(user, title: str, content: str, category_id: int = None):
         try:
-            author = Author.objects.filter(id=author_id).first()
-            if not author:
-                return RepositoryResponse(False, None, "Author not found.")
+            if not hasattr(user, "author"):
+                return RepositoryResponse(False, None, "Only authors can create blogs.")
+
+            author = user.author 
 
             category = Category.objects.filter(id=category_id).first() if category_id else None
             if category_id and not category:
@@ -31,10 +32,10 @@ class BlogRepository:
                 return RepositoryResponse(False, None, "A blog with this title already exists.")
 
             blog = Blog.objects.create(
-                created_by= user,
+                created_by=user,
                 title=title, content=content, author=author,
-                category=category, status=status,
-                published_at=now() if status == "published" else None
+                category=category, status="draft",
+                published_at=None  # Ensure it's unpublished
             )
 
             serialized_blog = BlogSerializer(blog).data
@@ -93,7 +94,8 @@ class BlogRepository:
             return RepositoryResponse(True, serialized_blog, "Blog updated successfully.")
         except Exception as e:
             return RepositoryResponse(False, None, f"Error updating blog: {e}")
-
+        
+        
     @staticmethod
     def delete_blog(blog_id: int):
         try:

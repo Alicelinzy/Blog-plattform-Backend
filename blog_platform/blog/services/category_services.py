@@ -1,7 +1,17 @@
 from blog.repositories.category_repository import CategoryRepository
-from blog.serializers import CategorySerializer 
-from base.utils.responses import APIResponse
+from blog.serializers import CategorySerializer
 from rest_framework import status
+
+
+class APIResponse:
+    def __init__(self, success: bool, data=None, message="", status=status.HTTP_200_OK):
+        self.success = success
+        self.data = data
+        self.message = message
+        self.status = status
+
+    def __str__(self):
+        return f"APIResponse(success={self.success}, data={self.data}, message={self.message}, status={self.status})"
 
 
 class CategoryService:

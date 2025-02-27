@@ -18,30 +18,55 @@ class APIResponse:
 
 class BlogService:
     @staticmethod
-    def create_blog(user, title: str, content: str, author_id: int, category_id: int = None):
+    def create_blog(user, title: str, content: str, category_id: int = None):
+        """Handles blog creation logic."""
+
         if not title or not content:
             return APIResponse(False, None, "Title and content are required.", status.HTTP_400_BAD_REQUEST)
 
-        author = AuthorRepository.get_author_by_id(author_id)
-        if not author.success:
-            return APIResponse(False, None, "Author not found.", status.HTTP_404_NOT_FOUND)
+        if not hasattr(user, "author"):
+            return APIResponse(False, None, "Only authors can create blogs.", status.HTTP_403_FORBIDDEN)
 
-        category = CategoryRepository.get_category_by_id(category_id) if category_id else None
-        if category and not category.success:
-            return APIResponse(False, None, "Category not found.", status.HTTP_404_NOT_FOUND)
+        category = None
+        if category_id:
+            category_response = CategoryRepository.get_category_by_id(category_id)  #
+            if not category_response.success:
+                return APIResponse(False, None, "Category not found.", status.HTTP_404_NOT_FOUND)
+            category = category_response.data
 
-        response = BlogRepository.create_blog(user, title, content, author_id, category_id if category else None)
-        return APIResponse(response.success, response.data, response.message, status.HTTP_201_CREATED if response.success else status.HTTP_400_BAD_REQUEST)
+            response = BlogRepository.create_blog(user, title, content, category["id"] if category else None)
+        
+        if response:
+            return APIResponse(
+                response.success,
+                response.data,
+                response.message,
+                status.HTTP_201_CREATED if response.success else status.HTTP_400_BAD_REQUEST
+            )
+
+        return APIResponse(False, None, "Something went wrong.", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @staticmethod
     def get_blog_by_id(blog_id: int):
+        """Retrieve a blog by its ID."""
         response = BlogRepository.get_blog_by_id(blog_id)
-        return APIResponse(response.success, response.data, response.message, status.HTTP_200_OK if response.success else status.HTTP_404_NOT_FOUND)
+        return APIResponse(
+            response.success,
+            response.data,
+            response.message,
+            status.HTTP_200_OK if response.success else status.HTTP_404_NOT_FOUND
+        )
 
     @staticmethod
     def get_all_blogs():
+        """Retrieve all blogs."""
         response = BlogRepository.get_all_blogs()
-        return APIResponse(response.success, response.data, response.message, status.HTTP_200_OK if response.success else status.HTTP_400_BAD_REQUEST)
+        return APIResponse(
+            response.success,
+            response.data,
+            response.message,
+            status.HTTP_200_OK if response.success else status.HTTP_400_BAD_REQUEST
+        )
 
     @staticmethod
     def update_blog(blog_id: int, **kwargs):
@@ -63,10 +88,16 @@ class BlogService:
 
     @staticmethod
     def delete_blog(blog_id: int):
+        """Delete a blog."""
         try:
             with transaction.atomic():
                 response = BlogRepository.delete_blog(blog_id)
-                return APIResponse(response.success, None, response.message, status.HTTP_200_OK if response.success else status.HTTP_400_BAD_REQUEST)
+                return APIResponse(
+                    response.success,
+                    None,
+                    response.message,
+                    status.HTTP_200_OK if response.success else status.HTTP_400_BAD_REQUEST
+                )
         except Exception as e:
             print(f"Error in delete_blog: {e}")
             return APIResponse(False, None, "Failed to delete blog.", status.HTTP_500_INTERNAL_SERVER_ERROR)
