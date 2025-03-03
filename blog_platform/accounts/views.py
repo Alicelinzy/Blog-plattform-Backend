@@ -127,7 +127,7 @@ def update_author(request, author_id):
 @api_view(["PUT", "PATCH"])
 @permission_classes([IsAuthenticated])  
 def update_reader(request, reader_id):
-    response = ReaderService.update_reader(reader_id, **request.data)
+    response = ReaderService.update_reader(reader_id, request.data)
 
     if response.success:
         return Response({"success": True, "message": response.message, "data": response.data}, status=status.HTTP_200_OK)

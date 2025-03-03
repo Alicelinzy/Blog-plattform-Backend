@@ -5,8 +5,8 @@ from comments.views import (
 )
 
 urlpatterns = [
-    path("", create_comment, name="create_comment"),  # ✅ Matches /api/comments/
-    path("comment/<int:comment_id>/", get_comment_by_id, name="get_comment"),
+    path("", create_comment, name="create_comment"),
+    path("<int:comment_id>/", get_comment_by_id, name="get_comment"),
     path("all/", get_all_comments, name="get_all_comments"),
     path("blog/<int:blog_id>/", get_comments_by_blog, name="get_comments_by_blog"),
     path("replies/<int:parent_comment_id>/", get_replies, name="get_replies"),
