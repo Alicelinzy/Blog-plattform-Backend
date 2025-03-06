@@ -142,7 +142,7 @@ class UserTests(APITestCase):
         response = self.client.get(url, **self.auth_headers)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["data"]["username"], self.reader.user.username)  # Updated assertion
+        self.assertEqual(response.data["data"]["username"], self.reader.user.username) 
 
     def test_update_reader(self):
         """Test updating a reader profile (self-update only)."""
