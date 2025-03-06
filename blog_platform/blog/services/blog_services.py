@@ -74,6 +74,9 @@ class BlogService:
             if not kwargs:
                 return APIResponse(False, None, "No update data provided.", status.HTTP_400_BAD_REQUEST)
 
+            if "title" in kwargs and not kwargs["title"]:
+                return APIResponse(False, None, "Title cannot be empty.", status.HTTP_400_BAD_REQUEST)
+
             with transaction.atomic():
                 response = BlogRepository.update_blog(blog_id, **kwargs)
                 return APIResponse(
