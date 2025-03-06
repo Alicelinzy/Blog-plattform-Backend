@@ -152,6 +152,6 @@ def delete_reader(request, reader_id):
     response = ReaderService.delete_reader(reader_id)
 
     if response.success:
-       return Response(status=status.HTTP_204_NO_CONTENT) 
+       return Response(status=response.status) 
 
     return Response({"success": False, "message": response.message}, status=status.HTTP_404_NOT_FOUND)

@@ -136,18 +136,12 @@ class ReaderService:
 
     @staticmethod
     def delete_reader(reader_id):
-        """Deletes a reader and their user account"""
-        try:
-            reader = Reader.objects.filter(user__id=reader_id).first()
-            if not reader:
-                return APIResponse(False, None, "Reader not found", status.HTTP_404_NOT_FOUND)
+        if not reader_id:
+            return APIResponse(False, None, "Reader ID is required.", status.HTTP_400_BAD_REQUEST)
 
-            
-            user_response = UserService.delete_user(reader.user.id)
-            if not user_response.success:
-                return user_response  
+        reader = Reader.objects.filter(id=reader_id).first()
+        if not reader:
+            return APIResponse(False, None, "Reader not found.", status.HTTP_404_NOT_FOUND)
 
-            return APIResponse(True, None, "Reader deleted successfully", status.HTTP_200_OK)
-
-        except Exception as e:
-            return APIResponse(False, None, f"Error deleting reader: {str(e)}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+        reader.delete()
+        return APIResponse(True, None, "Reader deleted successfully.", status.HTTP_204_NO_CONTENT)
