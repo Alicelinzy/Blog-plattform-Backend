@@ -141,7 +141,7 @@ def delete_author(request, author_id):
     response = AuthorService.delete_author(author_id)
 
     if response.success:
-        return Response({"success": True, "message": response.message}, status=status.HTTP_200_OK)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     return Response({"success": False, "message": response.message}, status=status.HTTP_404_NOT_FOUND)
 
@@ -152,6 +152,6 @@ def delete_reader(request, reader_id):
     response = ReaderService.delete_reader(reader_id)
 
     if response.success:
-        return Response({"success": True, "message": response.message}, status=status.HTTP_200_OK)
+       return Response(status=status.HTTP_204_NO_CONTENT) 
 
     return Response({"success": False, "message": response.message}, status=status.HTTP_404_NOT_FOUND)
